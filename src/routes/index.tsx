@@ -6,6 +6,8 @@ import {
   Navigation, Send, ShieldCheck, Smartphone, Ambulance, Users, ArrowRightLeft, Bot,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { createTransitPlan, formatTripTime } from "@/lib/transit-plan";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -46,6 +48,7 @@ function Index() {
   const [time, setTime] = useState("10:00");
   const [wheelchair, setWheelchair] = useState(false);
   const [routes, setRoutes] = useState(false);
+  const [useNextBus, setUseNextBus] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([
     { role: "bot", text: "Hello! I'm your MedTransit Assistant. Where and when is your upcoming appointment? I'll analyze DDOT, SMART, Medicaid transit, and volunteer shuttles to guarantee you arrive on time." },
@@ -63,11 +66,16 @@ function Index() {
     const hh = Math.floor(total / 60), mm = total % 60;
     return `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${hh < 12 ? "AM" : "PM"}`;
   };
-  const leaveBy = fmtTime(time, mins + 15);
+  const plan = createTransitPlan(date, time, mins);
+  const tripTime = (value: Date | undefined) => value && plan ? formatTripTime(value, plan.appointment) : "—";
+  const leaveBy = tripTime(useNextBus ? plan?.backupDeparture : plan?.primaryDeparture);
+  const arrival = tripTime(useNextBus ? plan?.backupArrival : plan?.primaryArrival);
 
   const calculate = () => {
+    if (!plan) { toast.error("Enter a valid appointment date and time."); return; }
+    setUseNextBus(false);
     setRoutes(true);
-    toast.success("Best routes found", { description: `3 options to ${hospName}` });
+    toast.success("Sample routes planned", { description: "Primary and next-bus options arrive at least 20 minutes early." });
   };
 
   const reply = (text: string): string => {
@@ -76,7 +84,9 @@ function Index() {
     if (tm) {
       let h = Number(tm[1]) % 12; if (tm[3] === "pm") h += 12;
       const nt = `${String(h).padStart(2, "0")}:${tm[2] ?? "00"}`; setTime(nt);
-      return `Got it — appointment at ${fmtTime(nt)}. From ${origin}, I recommend leaving by ${fmtTime(nt, mins + 15)}. DDOT Route 16 + SMART FAST has 88% on-time reliability, and the HFH Volunteer Shuttle has seats open. See the route options on the right.`;
+      const updatedPlan = createTransitPlan(date, nt, mins);
+      setUseNextBus(false);
+      return updatedPlan ? `Appointment at ${fmtTime(nt)}. Sample plan: leave ${formatTripTime(updatedPlan.primaryDeparture, updatedPlan.appointment)} and arrive 35 minutes early. If you miss that bus, leave ${formatTripTime(updatedPlan.backupDeparture, updatedPlan.appointment)} to arrive 20 minutes early. Actual departures and connections need confirmation.` : "Enter a valid appointment date to plan your ride.";
     }
     if (t.includes("wheelchair") || t.includes("accessib")) {
       setWheelchair(true);
@@ -85,7 +95,7 @@ function Index() {
     if (t.includes("remind") || t.includes("sms")) {
       return `Done — I'll text ${phone} two hours before pickup (${fmtTime(time, mins + 135)}) with the full itinerary and live bus arrival times.`;
     }
-    return `I've checked DDOT, SMART, volunteer shuttles and Medicaid NEMT for a trip from ${origin} to ${hospName}. Your best route takes about ${mins} minutes — leave by ${leaveBy}.`;
+    return `Sample trip from ${origin} to ${hospName}: about ${mins} minutes, leave by ${leaveBy}, arrive ${arrival}. The next-bus option preserves a 20-minute early arrival, assuming a 15-minute service interval. Confirm actual bus and transfer times before traveling.`;
   };
 
   const send = (text: string) => {
@@ -109,7 +119,7 @@ function Index() {
 
   const o = ORIGIN_PTS[origin] ?? [250, 210], d = HOSP_PTS[hospital] ?? [215, 175];
   const mid: [number, number] = [(o[0] + d[0]) / 2 + 25, (o[1] + d[1]) / 2 - 20];
-  const smsText = `MedTransit-AI: Hi ${name.split(" ")[0]}, your ride to ${hospName} on ${date} is set. Appt ${fmtTime(time)}. Leave by ${leaveBy}: board DDOT Rt 16 near ${origin}, transfer to SMART FAST, walk 4 min to entrance. Fare $2.00. Reply HELP for a coordinator or SHUTTLE to switch.`;
+  const smsText = `MedTransit-AI SAMPLE: Hi ${name.split(" ")[0]}, appointment at ${hospName} on ${date}, ${fmtTime(time)}. Leave by ${leaveBy}; estimated arrival ${arrival} (${useNextBus ? 20 : 35} min early). ${useNextBus ? "Next-bus option selected. If this bus is also missed, contact your coordinator." : `Miss the first bus? Next departure ${tripTime(plan?.backupDeparture)}, arrival ${tripTime(plan?.backupArrival)} (20 min early).`} Bus and transfer times are illustrative, not live-confirmed. Fare $2.00.`;
 
   return (
     <div className="min-h-screen">
@@ -126,7 +136,7 @@ function Index() {
           </div>
           <div className="flex items-center gap-2 rounded-full border border-primary-foreground/20 bg-primary-foreground/10 px-4 py-2 text-sm font-semibold" role="status">
             <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" /><span className="relative h-3 w-3 rounded-full bg-success" /></span>
-            Connected to DDOT &amp; SMART Real-Time Feeds
+            Sample schedules · live departures unverified
           </div>
         </div>
       </header>
@@ -215,7 +225,7 @@ function Index() {
               <text x={d[0] - 8} y={d[1] - 14} className="fill-foreground text-[11px] font-bold">✚ {hospName.replace("Henry Ford ", "HF ").slice(0, 26)}</text>
             </svg>
             <div className="flex items-center justify-between px-5 py-3 text-sm">
-              <span className="font-semibold">{routes ? `≈ ${mins} min · Leave by ${leaveBy}` : "Calculate a route to see it on the map"}</span>
+              <span className="font-semibold">{routes ? `≈ ${mins} min · Leave by ${leaveBy} · Arrive ${arrival}` : "Calculate a route to see it on the map"}</span>
               <span className="text-muted-foreground">Metro Detroit</span>
             </div>
           </div>
@@ -237,12 +247,20 @@ function Index() {
                   <li><strong>{leaveBy}</strong> — Walk 3 min to stop near {origin}</li>
                   <li><strong>DDOT Route 16 Dexter</strong> — ride 6 stops toward New Center</li>
                   <li><strong>Transfer</strong> to SMART FAST Woodward at Grand Blvd</li>
-                  <li><strong>Arrive</strong> — walk 4 min to {hospName}, ~15 min early</li>
+                  <li><strong>Arrive {arrival}</strong> — walk 4 min to {hospName}, {useNextBus ? 20 : 35} min early</li>
                 </ol>
+                <div className="mt-4 space-y-3 border-t pt-4">
+                  <h4 className="font-bold">{useNextBus ? "Next bus selected" : "Missed the first bus?"}</h4>
+                  <p>Next departure <strong>{tripTime(plan?.backupDeparture)}</strong> · Arrival <strong>{tripTime(plan?.backupArrival)}</strong> · 20 min before your appointment.</p>
+                  <p className="text-sm text-muted-foreground">Sample 15-minute bus interval and {mins}-minute complete trip, including transfer and walking. Actual service may differ; a further missed bus or delay requires coordinator help.</p>
+                  <Button variant="outline" className="min-h-12 h-auto whitespace-normal" disabled={!plan} onClick={() => setUseNextBus((value) => !value)}>
+                    <ArrowRightLeft /> {useNextBus ? "Return to first bus" : "I missed the first bus — use next bus"}
+                  </Button>
+                </div>
               </RouteCard>
               <RouteCard icon={<Users />} tag="Free Healthcare Shuttle" title="Option B · HFH Community Volunteer Shuttle">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-semibold">Pickup window: {fmtTime(time, mins + 40)} – {fmtTime(time, mins + 25)}</span>
+                  <span className="font-semibold">Sample pickup window: {fmtTime(time, mins + 40)} – {fmtTime(time, mins + 20)} · Arrive at least 20 min early</span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm font-semibold"><Accessibility className="h-4 w-4" /> Wheelchair accessible</span>
                   <span className="rounded-full bg-success/15 px-3 py-1 text-sm font-semibold text-success">Free</span>
                 </div>
@@ -250,7 +268,7 @@ function Index() {
               </RouteCard>
               <RouteCard icon={<Ambulance />} tag="Medicaid NEMT" title="Option C · Non-Emergency Medical Transport Rider">
                 <p><CheckCircle2 className="mr-2 inline h-5 w-5 align-[-4px] text-success" />Eligibility preview: <strong>Likely eligible</strong> (Michigan Medicaid / Healthy Michigan Plan)</p>
-                <p className="mt-1 text-sm text-muted-foreground">Door-to-door{wheelchair ? ", lift-equipped van" : ""}. Book 2+ business days ahead.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Door-to-door{wheelchair ? ", lift-equipped van" : ""}. Request arrival by {tripTime(plan?.backupArrival)} (20 min early). Book 2+ business days ahead; pickup requires provider confirmation.</p>
                 <button onClick={() => toast.success("NEMT dispatch requested", { description: "Confirmation within 24 hours" })} className={btn + " mt-4 bg-accent text-accent-foreground"}>Request Dispatch</button>
               </RouteCard>
             </div>
@@ -264,6 +282,12 @@ function Index() {
               <Bell className="h-5 w-5" /> Alert Care Coordinator of Transit Plan
             </button>
           </div>
+          <section aria-labelledby="calendar-status" className="space-y-2 border-t pt-5">
+            <h3 id="calendar-status" className="text-lg font-bold">Shared care-team calendar</h3>
+            <p className="font-semibold text-muted-foreground">Google Calendar · Not connected</p>
+            <p className="text-sm text-muted-foreground">Apple Calendar · Sync pending. Once connected, the shared Google calendar can stay up to date in Apple Calendar through a Google account with access. Native iCloud sync is not connected.</p>
+            <p className="text-sm text-muted-foreground">No patient or ride details have been sent to a calendar. Shared patient details must be limited to authorized recipients.</p>
+          </section>
         </section>
       </main>
 
