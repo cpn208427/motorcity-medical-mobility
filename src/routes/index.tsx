@@ -8,6 +8,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { createTransitPlan, formatTripTime } from "@/lib/transit-plan";
+import { LiveBusTracker } from "@/components/live-bus-tracker";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,7 +52,7 @@ function Index() {
   const [useNextBus, setUseNextBus] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "bot", text: "Hello! I'm your MedTransit Assistant. Where and when is your upcoming appointment? I'll analyze DDOT, SMART, Medicaid transit, and volunteer shuttles to guarantee you arrive on time." },
+    { role: "bot", text: "Hello! I'm your MedTransit Assistant. Where and when is your upcoming appointment? I can help plan a sample trip. Current bus arrivals are available in the official live trackers; travel times and connections need confirmation." },
   ]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -93,7 +94,7 @@ function Index() {
       return "Noted: wheelchair accessible transit required. The HFH Volunteer Shuttle and Medicaid NEMT both offer lift-equipped vehicles. All DDOT and SMART buses on this route have ramps and kneeling floors.";
     }
     if (t.includes("remind") || t.includes("sms")) {
-      return `Done — I'll text ${phone} two hours before pickup (${fmtTime(time, mins + 135)}) with the full itinerary and live bus arrival times.`;
+      return `Your sample itinerary can be previewed using the SMS button. For current bus arrivals, use the official DDOT or SMART live tracker. No reminder has been scheduled.`;
     }
     return `Sample trip from ${origin} to ${hospName}: about ${mins} minutes, leave by ${leaveBy}, arrive ${arrival}. The next-bus option preserves a 20-minute early arrival, assuming a 15-minute service interval. Confirm actual bus and transfer times before traveling.`;
   };
@@ -209,7 +210,8 @@ function Index() {
 
         {/* RIGHT */}
         <section aria-labelledby="output" className="space-y-6">
-          <h2 id="output" className="text-xl font-bold">Live Route &amp; Coordination Output</h2>
+          <h2 id="output" className="text-xl font-bold">Routes &amp; Ride Coordination</h2>
+          <LiveBusTracker />
           <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
             <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" className="h-72 w-full bg-secondary" role="img" aria-label={`Map from ${origin} to ${hospName}`}>
               <path d="M330 300 C 320 250, 340 200, 400 170 L400 300 Z" className="fill-accent/25" />
