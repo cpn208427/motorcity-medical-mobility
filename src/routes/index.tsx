@@ -3,12 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Activity, Bus, Accessibility, Bell, CheckCircle2, Clock, DollarSign, MapPin, Mic,
-  Navigation, Send, ShieldCheck, Smartphone, Ambulance, Users, ArrowRightLeft, Bot,
+  Navigation, Send, ShieldCheck, Smartphone, Ambulance, Users, ArrowRightLeft, Bot, Footprints,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { createTransitPlan, formatTripTime } from "@/lib/transit-plan";
+import { createSampleTransitLegs, createTransitPlan, formatTripTime, summarizeTransitLegs, timeTransitLegs } from "@/lib/transit-plan";
 import { LiveBusTracker } from "@/components/live-bus-tracker";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { HOSPITALS, HOSPITAL_DIRECTORY_URL } from "@/lib/hospitals";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -25,17 +27,10 @@ export const Route = createFileRoute("/")({
 });
 
 const ORIGINS = ["Current Location", "Detroit - Midtown", "Warren", "Dearborn"] as const;
-const HOSPITALS = [
-  "Henry Ford Hospital - Main Campus (2799 W Grand Blvd)",
-  "Henry Ford West Bloomfield",
-  "Henry Ford Health Center - Brownstown",
-  "Detroit Medical Center",
-];
 // Rough map coordinates (SVG 400x300 space)
 const ORIGIN_PTS: Record<string, [number, number]> = {
   "Current Location": [250, 210], "Detroit - Midtown": [235, 195], Warren: [290, 80], Dearborn: [130, 225],
 };
-const HOSP_PTS: [number, number][] = [[215, 175], [60, 70], [110, 285], [245, 200]];
 const MINUTES: Record<string, number> = { "Current Location": 32, "Detroit - Midtown": 18, Warren: 46, Dearborn: 38 };
 
 type Msg = { role: "bot" | "user"; text: string };
@@ -59,8 +54,12 @@ function Index() {
   const chatEnd = useRef<HTMLDivElement>(null);
   useEffect(() => chatEnd.current?.scrollIntoView({ block: "nearest" }), [msgs, typing]);
 
-  const hospName = (HOSPITALS[hospital] ?? "").split(" (")[0] ?? "";
-  const mins = (MINUTES[origin] ?? 30) + (hospital === 1 ? 20 : 0);
+  const destination = HOSPITALS[hospital] ?? HOSPITALS[0];
+  const hospName = destination.name;
+  const legs = createSampleTransitLegs(MINUTES[origin] ?? 30);
+  const duration = summarizeTransitLegs(legs);
+  const mins = duration.totalMinutes;
+  const durationText = `${duration.rideMinutes} min on buses + ${duration.waitMinutes} min transfer wait + ${duration.walkMinutes} min walking`;
   const fmtTime = (t: string, offsetMin = 0) => {
     const [h = 0, m = 0] = t.split(":").map(Number);
     const total = (h * 60 + m - offsetMin + 1440) % 1440;
@@ -71,6 +70,10 @@ function Index() {
   const tripTime = (value: Date | undefined) => value && plan ? formatTripTime(value, plan.appointment) : "—";
   const leaveBy = tripTime(useNextBus ? plan?.backupDeparture : plan?.primaryDeparture);
   const arrival = tripTime(useNextBus ? plan?.backupArrival : plan?.primaryArrival);
+  const departure = useNextBus ? plan?.backupDeparture : plan?.primaryDeparture;
+  const timedLegs = departure ? timeTransitLegs(departure, legs) : [];
+  const firstBusDeparture = timedLegs.find((leg) => leg.kind === "ride")?.start;
+  const backupBusDeparture = plan ? timeTransitLegs(plan.backupDeparture, legs).find((leg) => leg.kind === "ride")?.start : undefined;
 
   const calculate = () => {
     if (!plan) { toast.error("Enter a valid appointment date and time."); return; }
@@ -87,7 +90,7 @@ function Index() {
       const nt = `${String(h).padStart(2, "0")}:${tm[2] ?? "00"}`; setTime(nt);
       const updatedPlan = createTransitPlan(date, nt, mins);
       setUseNextBus(false);
-      return updatedPlan ? `Appointment at ${fmtTime(nt)}. Sample plan: leave ${formatTripTime(updatedPlan.primaryDeparture, updatedPlan.appointment)} and arrive 35 minutes early. If you miss that bus, leave ${formatTripTime(updatedPlan.backupDeparture, updatedPlan.appointment)} to arrive 20 minutes early. Actual departures and connections need confirmation.` : "Enter a valid appointment date to plan your ride.";
+      return updatedPlan ? `Appointment at ${fmtTime(nt)}. Sample plan: leave ${formatTripTime(updatedPlan.primaryDeparture, updatedPlan.appointment)} and arrive at the hospital entrance 35 minutes early. Journey: ${durationText}. If you miss that bus, leave ${formatTripTime(updatedPlan.backupDeparture, updatedPlan.appointment)} to arrive 20 minutes early, including all walks and the transfer wait. Actual departures, coverage, and connections need confirmation.` : "Enter a valid appointment date to plan your ride.";
     }
     if (t.includes("wheelchair") || t.includes("accessib")) {
       setWheelchair(true);
@@ -96,7 +99,7 @@ function Index() {
     if (t.includes("remind") || t.includes("sms")) {
       return `Your sample itinerary can be previewed using the SMS button. For current bus arrivals, use the official DDOT or SMART live tracker. No reminder has been scheduled.`;
     }
-    return `Sample trip from ${origin} to ${hospName}: about ${mins} minutes, leave by ${leaveBy}, arrive ${arrival}. The next-bus option preserves a 20-minute early arrival, assuming a 15-minute service interval. Confirm actual bus and transfer times before traveling.`;
+    return `Sample trip from ${origin} to ${hospName}, ${destination.address}: about ${mins} minutes (${durationText}), leave by ${leaveBy}, arrive at the entrance ${arrival}. The next-bus option preserves a 20-minute early arrival, assuming a 15-minute service interval. Confirm actual bus coverage, walking access, and transfer times before traveling.`;
   };
 
   const send = (text: string) => {
@@ -118,9 +121,9 @@ function Index() {
     r.start(); toast("Listening… speak now");
   };
 
-  const o = ORIGIN_PTS[origin] ?? [250, 210], d = HOSP_PTS[hospital] ?? [215, 175];
+  const o = ORIGIN_PTS[origin] ?? [250, 210], d = [215, 175];
   const mid: [number, number] = [(o[0] + d[0]) / 2 + 25, (o[1] + d[1]) / 2 - 20];
-  const smsText = `MedTransit-AI SAMPLE: Hi ${name.split(" ")[0]}, appointment at ${hospName} on ${date}, ${fmtTime(time)}. Leave by ${leaveBy}; estimated arrival ${arrival} (${useNextBus ? 20 : 35} min early). ${useNextBus ? "Next-bus option selected. If this bus is also missed, contact your coordinator." : `Miss the first bus? Next departure ${tripTime(plan?.backupDeparture)}, arrival ${tripTime(plan?.backupArrival)} (20 min early).`} Bus and transfer times are illustrative, not live-confirmed. Fare $2.00.`;
+  const smsText = `MedTransit-AI SAMPLE: Hi ${name.split(" ")[0]}, appointment at ${hospName}, ${destination.address} on ${date}, ${fmtTime(time)}. Leave home by ${leaveBy}; first bus ${tripTime(firstBusDeparture)}; arrival at hospital entrance ${arrival} (${useNextBus ? 20 : 35} min early). Total ${mins} min: ${durationText}. ${useNextBus ? "Next-bus option selected. If this bus is also missed, contact your coordinator." : `Miss the first bus? Leave home ${tripTime(plan?.backupDeparture)}, next bus ${tripTime(backupBusDeparture)}, arrival ${tripTime(plan?.backupArrival)} (20 min early).`} Bus coverage, walking and transfer times are illustrative, not live-confirmed. Fare $2.00.`;
 
   return (
     <div className="min-h-screen">
@@ -162,11 +165,24 @@ function Index() {
                 ))}
               </div>
             </fieldset>
-            <div className="mt-4"><Field label="Destination hospital">
-              <select className={inp} value={hospital} onChange={(e) => setHospital(Number(e.target.value))}>
-                {HOSPITALS.map((h, i) => <option key={h} value={i}>{h}</option>)}
-              </select>
-            </Field></div>
+            <div className="mt-4 space-y-2">
+              <label id="hospital-label" className="block font-semibold">Destination hospital</label>
+              <Select value={String(hospital)} onValueChange={(value) => { setHospital(Number(value)); setUseNextBus(false); }}>
+                <SelectTrigger aria-labelledby="hospital-label" className="h-auto min-h-20 whitespace-normal border-2 bg-card px-3 py-3 text-left text-base [&>span]:line-clamp-none">
+                  <span className="min-w-0 flex-1 space-y-1">
+                    <span className="block font-semibold">{destination.name}</span>
+                    <span className="block text-sm text-muted-foreground">{destination.address}</span>
+                  </span>
+                </SelectTrigger>
+                <SelectContent className="max-h-96 w-[var(--radix-select-trigger-width)]">
+                  {HOSPITALS.map((h, i) => <SelectItem key={h.name} value={String(i)} className="py-3 text-base">
+                    <span className="block whitespace-normal font-semibold">{h.name}</span>
+                    <span className="block whitespace-normal text-sm">{h.address}</span>
+                  </SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">12 hospitals in the <a className="underline underline-offset-2" href={HOSPITAL_DIRECTORY_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Henry Ford Health directory</a>. Bus coverage and travel times to each destination need confirmation.</p>
+            </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field label="Appointment date"><input className={inp} type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
               <Field label="Appointment time"><input className={inp} type="time" value={time} onChange={(e) => setTime(e.target.value)} /></Field>
@@ -228,7 +244,7 @@ function Index() {
             </svg>
             <div className="flex items-center justify-between px-5 py-3 text-sm">
               <span className="font-semibold">{routes ? `≈ ${mins} min · Leave by ${leaveBy} · Arrive ${arrival}` : "Calculate a route to see it on the map"}</span>
-              <span className="text-muted-foreground">Metro Detroit</span>
+              <span className="shrink-0 text-muted-foreground">Illustrative map</span>
             </div>
           </div>
 
@@ -238,23 +254,24 @@ function Index() {
             </div>
           ) : (
             <div className="space-y-4">
-              <RouteCard icon={<Bus />} tag="Public Transit" title="Option A · DDOT Route 16 + SMART FAST" best>
+              <RouteCard icon={<Bus />} tag="Sample public transit · coverage unverified" title="Option A · Two-bus journey" best>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <Stat icon={<Clock />} label="Travel" value={`${mins} min`} />
                   <Stat icon={<ArrowRightLeft />} label="Transfers" value="1" />
                   <Stat icon={<DollarSign />} label="Cost" value="$2.00" />
-                  <Stat icon={<ShieldCheck />} label="On-time" value="88%" />
+                  <Stat icon={<Clock />} label="Wait" value={`${duration.waitMinutes} min`} />
                 </div>
+                <p className="mt-3 flex items-start gap-2 text-sm font-semibold"><Footprints className="h-5 w-5 shrink-0" />{durationText} · Total {mins} min</p>
                 <ol className="mt-4 space-y-2 border-l-2 border-accent pl-4">
-                  <li><strong>{leaveBy}</strong> — Walk 3 min to stop near {origin}</li>
-                  <li><strong>DDOT Route 16 Dexter</strong> — ride 6 stops toward New Center</li>
-                  <li><strong>Transfer</strong> to SMART FAST Woodward at Grand Blvd</li>
-                  <li><strong>Arrive {arrival}</strong> — walk 4 min to {hospName}, {useNextBus ? 20 : 35} min early</li>
+                  {timedLegs.map((leg, index) => <li key={index}>
+                    <strong>{tripTime(leg.start)} – {tripTime(leg.end)}</strong> — {leg.label} · {leg.minutes} min
+                  </li>)}
+                  <li><strong>Arrive at entrance {arrival}</strong> — {hospName}, {useNextBus ? 20 : 35} min early</li>
                 </ol>
                 <div className="mt-4 space-y-3 border-t pt-4">
                   <h4 className="font-bold">{useNextBus ? "Next bus selected" : "Missed the first bus?"}</h4>
-                  <p>Next departure <strong>{tripTime(plan?.backupDeparture)}</strong> · Arrival <strong>{tripTime(plan?.backupArrival)}</strong> · 20 min before your appointment.</p>
-                  <p className="text-sm text-muted-foreground">Sample 15-minute bus interval and {mins}-minute complete trip, including transfer and walking. Actual service may differ; a further missed bus or delay requires coordinator help.</p>
+                  <p>Leave home <strong>{tripTime(plan?.backupDeparture)}</strong> · Next bus <strong>{tripTime(backupBusDeparture)}</strong> · Entrance arrival <strong>{tripTime(plan?.backupArrival)}</strong> · 20 min before your appointment.</p>
+                  <p className="text-sm text-muted-foreground">Sample 15-minute bus interval; both options include {duration.waitMinutes} min transfer waiting and {duration.walkMinutes} min walking. Routes, transfer waits, and walking access are not verified for this destination. Confirm with the agency; a further missed bus or delay requires coordinator help.</p>
                   <Button variant="outline" className="min-h-12 h-auto whitespace-normal" disabled={!plan} onClick={() => setUseNextBus((value) => !value)}>
                     <ArrowRightLeft /> {useNextBus ? "Return to first bus" : "I missed the first bus — use next bus"}
                   </Button>
