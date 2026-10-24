@@ -72,7 +72,7 @@ function Index() {
 
   const reply = (text: string): string => {
     const t = text.toLowerCase();
-    const tm = t.match(/(\d{1,2})(?::(\d2))?\s*(am|pm)/);
+    const tm = t.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
     if (tm) {
       let h = Number(tm[1]) % 12; if (tm[3] === "pm") h += 12;
       const nt = `${String(h).padStart(2, "0")}:${tm[2] ?? "00"}`; setTime(nt);
