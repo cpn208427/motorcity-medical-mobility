@@ -249,7 +249,7 @@ function Index() {
                 <button onClick={() => toast.success("Seat reserved", { description: `Shuttle pickup for ${name}` })} className={btn + " mt-4 bg-primary text-primary-foreground"}>Reserve Seat</button>
               </RouteCard>
               <RouteCard icon={<Ambulance />} tag="Medicaid NEMT" title="Option C · Non-Emergency Medical Transport Rider">
-                <p className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-success" /> Eligibility preview: <strong>Likely eligible</strong> (Michigan Medicaid / Healthy Michigan Plan)</p>
+                <p><CheckCircle2 className="mr-2 inline h-5 w-5 align-[-4px] text-success" />Eligibility preview: <strong>Likely eligible</strong> (Michigan Medicaid / Healthy Michigan Plan)</p>
                 <p className="mt-1 text-sm text-muted-foreground">Door-to-door{wheelchair ? ", lift-equipped van" : ""}. Book 2+ business days ahead.</p>
                 <button onClick={() => toast.success("NEMT dispatch requested", { description: "Confirmation within 24 hours" })} className={btn + " mt-4 bg-accent text-accent-foreground"}>Request Dispatch</button>
               </RouteCard>
