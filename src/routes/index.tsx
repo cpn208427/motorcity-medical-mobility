@@ -55,7 +55,7 @@ function Index() {
   const chatEnd = useRef<HTMLDivElement>(null);
   useEffect(() => chatEnd.current?.scrollIntoView({ block: "nearest" }), [msgs, typing]);
 
-  const hospName = HOSPITALS[hospital].split(" (")[0];
+  const hospName = (HOSPITALS[hospital] ?? "").split(" (")[0] ?? "";
   const mins = MINUTES[origin] + (hospital === 1 ? 20 : 0);
   const fmtTime = (t: string, offsetMin = 0) => {
     const [h, m] = t.split(":").map(Number);
@@ -107,7 +107,7 @@ function Index() {
     r.start(); toast("Listening… speak now");
   };
 
-  const o = ORIGIN_PTS[origin], d = HOSP_PTS[hospital];
+  const o = ORIGIN_PTS[origin] ?? [250, 210], d = HOSP_PTS[hospital] ?? [215, 175];
   const mid: [number, number] = [(o[0] + d[0]) / 2 + 25, (o[1] + d[1]) / 2 - 20];
   const smsText = `MedTransit-AI: Hi ${name.split(" ")[0]}, your ride to ${hospName} on ${date} is set. Appt ${fmtTime(time)}. Leave by ${leaveBy}: board DDOT Rt 16 near ${origin}, transfer to SMART FAST, walk 4 min to entrance. Fare $2.00. Reply HELP for a coordinator or SHUTTLE to switch.`;
 
