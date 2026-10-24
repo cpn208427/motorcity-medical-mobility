@@ -201,7 +201,7 @@ function Index() {
         <section aria-labelledby="output" className="space-y-6">
           <h2 id="output" className="text-xl font-bold">Live Route &amp; Coordination Output</h2>
           <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-            <svg viewBox="0 0 400 300" className="h-72 w-full bg-secondary" role="img" aria-label={`Map from ${origin} to ${hospName}`}>
+            <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" className="h-72 w-full bg-secondary" role="img" aria-label={`Map from ${origin} to ${hospName}`}>
               <path d="M330 300 C 320 250, 340 200, 400 170 L400 300 Z" className="fill-accent/25" />
               {[60, 120, 180, 240].map((y) => <line key={y} x1="0" x2="400" y1={y} y2={y} className="stroke-border" strokeWidth="1.5" />)}
               {[80, 160, 240, 320].map((x) => <line key={x} y1="0" y2="300" x1={x} x2={x} className="stroke-border" strokeWidth="1.5" />)}
