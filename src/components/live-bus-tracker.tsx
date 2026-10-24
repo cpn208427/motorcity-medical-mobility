@@ -18,7 +18,7 @@ export function LiveBusTracker() {
           </a>
         </Button>
         <Button asChild variant="outline" className="h-auto min-h-14 whitespace-normal px-4 py-3">
-          <a href="https://www.smartbus.org/Services/SMART-Basics/Bus-Tracker" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+          <a href="https://www.mysmartbus.com/map" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
             <Bus aria-hidden /> Track SMART buses <ExternalLink aria-hidden />
           </a>
         </Button>
