@@ -56,9 +56,9 @@ function Index() {
   useEffect(() => chatEnd.current?.scrollIntoView({ block: "nearest" }), [msgs, typing]);
 
   const hospName = (HOSPITALS[hospital] ?? "").split(" (")[0] ?? "";
-  const mins = MINUTES[origin] + (hospital === 1 ? 20 : 0);
+  const mins = (MINUTES[origin] ?? 30) + (hospital === 1 ? 20 : 0);
   const fmtTime = (t: string, offsetMin = 0) => {
-    const [h, m] = t.split(":").map(Number);
+    const [h = 0, m = 0] = t.split(":").map(Number);
     const total = (h * 60 + m - offsetMin + 1440) % 1440;
     const hh = Math.floor(total / 60), mm = total % 60;
     return `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${hh < 12 ? "AM" : "PM"}`;
